@@ -6,6 +6,8 @@ from pathlib import Path
 
 import environ
 
+from .unfold_admin import UNFOLD  # noqa: F401
+
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
 # core/
 APPS_DIR = BASE_DIR / "core"
@@ -24,7 +26,7 @@ DEBUG = env.bool("DJANGO_DEBUG", False)
 # http://en.wikipedia.org/wiki/List_of_tz_zones_by_name
 # though not all of them may be available with every OS.
 # In Windows, this must be set to your system time zone.
-TIME_ZONE = "UTC"
+TIME_ZONE = "Asia/Jakarta"
 # https://docs.djangoproject.com/en/dev/ref/settings/#language-code
 LANGUAGE_CODE = "en-us"
 # https://docs.djangoproject.com/en/dev/ref/settings/#languages
@@ -64,10 +66,11 @@ DJANGO_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
-    "django.contrib.sites",
+    # "django.contrib.sites",
     "django.contrib.messages",
     "django.contrib.staticfiles",
     # "django.contrib.humanize", # Handy template tags
+    "unfold",
     "django.contrib.admin",
     "django.forms",
 ]
@@ -76,8 +79,8 @@ THIRD_PARTY_APPS = [
     "crispy_bootstrap5",
     "allauth",
     "allauth.account",
-    "allauth.mfa",
-    "allauth.socialaccount",
+    # "allauth.mfa",
+    # "allauth.socialaccount",
     "django_celery_beat",
     "rest_framework",
     "rest_framework.authtoken",
@@ -348,5 +351,8 @@ SPECTACULAR_SETTINGS = {
     "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAdminUser"],
     "SCHEMA_PATH_PREFIX": "/api/",
 }
+# Django Unfold configuration is imported from unfold_admin.py
+# ------------------------------------------------------------------------------
+
 # Your stuff...
 # ------------------------------------------------------------------------------
