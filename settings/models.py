@@ -22,3 +22,25 @@ class OpenAISetting(SingletonModel):
 
     class Meta:
         verbose_name = "OpenAI Setting"
+
+
+class CoreAPISetting(SingletonModel):
+    api_url = models.URLField(
+        max_length=255,
+        default="",
+        help_text="Core API URL",
+    )
+    api_token = models.CharField(
+        max_length=255,
+        default="",
+        help_text="Core API Token",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return "Core API Settings"
+
+    class Meta:
+        verbose_name = "Core API Setting"
