@@ -1,0 +1,83 @@
+volumes:
+  instarchiver_production_postgres_data: {}
+  instarchiver_production_postgres_data_backups: {}
+  instarchiver_production_traefik: {}
+  instarchiver_production_django_media: {}
+
+  instarchiver_production_redis_data: {}
+
+
+
+services:
+  django: &django
+    build:
+      context: .
+      dockerfile: ./compose/production/django/Dockerfile
+
+    image: instarchiver_production_django
+    volumes:
+      - instarchiver_production_django_media:/app/core/media
+    depends_on:
+      - postgres
+      - redis
+    env_file:
+      - ./.envs/.production/.django
+      - ./.envs/.production/.postgres
+    command: /start
+
+  postgres:
+    build:
+      context: .
+      dockerfile: ./compose/production/postgres/Dockerfile
+    image: instarchiver_production_postgres
+    volumes:
+      - instarchiver_production_postgres_data:/var/lib/postgresql/data
+      - instarchiver_production_postgres_data_backups:/backups
+    env_file:
+      - ./.envs/.production/.postgres
+
+  traefik:
+    build:
+      context: .
+      dockerfile: ./compose/production/traefik/Dockerfile
+    image: instarchiver_production_traefik
+    depends_on:
+      - django
+    volumes:
+      - instarchiver_production_traefik:/etc/traefik/acme
+    ports:
+      - '0.0.0.0:80:80'
+      - '0.0.0.0:443:443'
+      - '0.0.0.0:5555:5555'
+
+  redis:
+    image: docker.io/redis:6
+
+    volumes:
+      - instarchiver_production_redis_data:/data
+
+
+  celeryworker:
+    <<: *django
+    image: instarchiver_production_celeryworker
+    command: /start-celeryworker
+
+  celerybeat:
+    <<: *django
+    image: instarchiver_production_celerybeat
+    command: /start-celerybeat
+
+  flower:
+    <<: *django
+    image: instarchiver_production_flower
+    command: /start-flower
+
+  nginx:
+    build:
+      context: .
+      dockerfile: ./compose/production/nginx/Dockerfile
+    image: core_production_nginx
+    depends_on:
+      - django
+    volumes:
+      - instarchiver_production_django_media:/usr/share/nginx/media:ro
