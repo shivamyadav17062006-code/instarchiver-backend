@@ -99,6 +99,16 @@ UNFOLD = {
                         "icon": "account_circle",
                         "link": "/admin/instagram/user/",
                     },
+                    {
+                        "title": "Stories",
+                        "icon": "photo_library",
+                        "link": "/admin/instagram/story/",
+                    },
+                    {
+                        "title": "Story Update Logs",
+                        "icon": "history",
+                        "link": "/admin/instagram/userupdatestorylog/",
+                    },
                 ],
             },
             {

@@ -7,8 +7,10 @@ from simple_history.models import HistoricalRecords
 
 from core.utils.instagram_api import fetch_user_info_by_user_id
 from core.utils.instagram_api import fetch_user_info_by_username_v2
+from core.utils.instagram_api import fetch_user_stories_by_username
 
 from .misc import get_user_profile_picture_upload_location
+from .misc import get_user_story_upload_location
 
 logger = logging.getLogger(__name__)
 
@@ -128,3 +130,160 @@ class User(models.Model):
         # Update timestamp and save
         self.api_updated_at = timezone.now()
         self.save()
+
+    def _update_stories_from_api(self):
+        """Update user stories from Instagram API with full error handling and logging."""  # noqa: E501
+        # Create log entry to track this operation
+        log_entry = UserUpdateStoryLog.objects.create(
+            user=self,
+            status=UserUpdateStoryLog.STATUS_IN_PROGRESS,
+            message="Started story update from API",
+        )
+
+        try:
+            # Fetch stories from Instagram API
+            response = fetch_user_stories_by_username(self.username)
+
+            # Check for errors in the response
+            if response.get("data") and not response["data"].get("status"):
+                error_message = response["data"].get(
+                    "errorMessage",
+                    "Unknown API error",
+                )
+                msg = (
+                    f"Error fetching stories for user {self.username}. {error_message}"
+                )
+                logger.error(msg)
+
+                # Update log entry with failure
+                log_entry.status = UserUpdateStoryLog.STATUS_FAILED
+                log_entry.message = msg
+                log_entry.save()
+
+                raise Exception(msg)  # noqa: TRY002, TRY301
+
+            # Extract stories data
+            stories_data = response.get("data", {}).get("data", {}).get("items", [])
+            updated_stories = []
+
+            # Process each story
+            for story_data in stories_data:
+                story_id = story_data.get("id")
+
+                # Create or update story
+                story, _ = Story.objects.get_or_create(
+                    story_id=story_id,
+                    defaults={
+                        "story_id": story_id,
+                        "user": self,
+                        "thumbnail_url": story_data.get("thumbnail_url_original"),
+                        "media_url": story_data.get("video_url_original")
+                        or story_data.get("thumbnail_url_original"),
+                        "story_created_at": story_data.get("taken_at_date"),
+                        "raw_api_data": story_data,
+                    },
+                )
+
+                updated_stories.append(story)
+
+            # Update log entry with success
+            log_entry.status = UserUpdateStoryLog.STATUS_COMPLETED
+            log_entry.message = f"Successfully updated {len(updated_stories)} stories"
+            log_entry.save()
+
+            logger.info(
+                "Successfully updated %d stories for user %s",
+                len(updated_stories),
+                self.username,
+            )
+            return updated_stories  # noqa: TRY300
+
+        except Exception as e:
+            # Update log entry with failure if not
+            #  already updated
+            if log_entry.status == UserUpdateStoryLog.STATUS_IN_PROGRESS:
+                log_entry.status = UserUpdateStoryLog.STATUS_FAILED
+                log_entry.message = str(e)
+                log_entry.save()
+
+            logger.exception(
+                "Failed to update stories for user %s: %s",
+                self.username,
+                e,  # noqa: TRY401
+            )
+            raise
+
+    def update_stories_from_api(self):
+        """Update user stories from Instagram API synchronously."""
+        return self._update_stories_from_api()
+
+    def update_stories_from_api_async(self):
+        """
+        Trigger asynchronous update of user stories from Instagram API.
+        Use this method to queue the story update as a background task.
+        """
+        from .tasks import update_user_stories_from_api  # noqa: PLC0415
+
+        logger.info("Queuing story update task for user %s", self.username)
+        return update_user_stories_from_api.delay(self.uuid)
+
+
+class Story(models.Model):
+    story_id = models.CharField(unique=True, max_length=50, primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    thumbnail_url = models.URLField(max_length=2500)
+    media_url = models.URLField(max_length=2500, blank=True)
+
+    thumbnail = models.ImageField(
+        upload_to=get_user_story_upload_location,
+        blank=True,
+        null=True,
+    )
+    media = models.FileField(
+        upload_to=get_user_story_upload_location,
+        blank=True,
+        null=True,
+    )
+    raw_api_data = models.JSONField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    story_created_at = models.DateTimeField()
+
+    class Meta:
+        verbose_name = "Story"
+        verbose_name_plural = "Stories"
+
+    def __str__(self):
+        return f"{self.user.username} - {self.story_id}"
+
+
+class UserUpdateStoryLog(models.Model):
+    STATUS_PENDING = "PENDING"
+    STATUS_IN_PROGRESS = "IN_PROGRESS"
+    STATUS_COMPLETED = "COMPLETED"
+    STATUS_FAILED = "FAILED"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_IN_PROGRESS, "In Progress"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_FAILED, "Failed"),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+    )
+    message = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "User Update Story Log"
+        verbose_name_plural = "User Update Story Logs"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Story Update for {self.user.username} - {self.status}"
