@@ -21,7 +21,7 @@ services:
     image: instarchiver_production_django
     volumes:
       - instarchiver_production_django_media:/app/core/media
-    depends_on:
+    # depends_on:
       # - postgres
       # - redis
     env_file:
